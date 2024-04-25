@@ -1,8 +1,12 @@
+import path from 'path';
+
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
+import replace from '@rollup/plugin-replace';
 import sourceMaps from 'rollup-plugin-sourcemaps';
 import typescript from 'rollup-plugin-typescript2';
+
 import pkg from './package.json';
 
 const plugins = [
@@ -10,6 +14,9 @@ const plugins = [
   resolve({
     browser: false,
     preferBuiltins: true,
+  }),
+  replace({
+    __dirname: path.resolve(__dirname, './src'),
   }),
   commonjs({
     ignoreDynamicRequires: true,
@@ -25,6 +32,12 @@ export default {
       file: pkg.main,
       name: pkg.name,
       format: 'cjs',
+      sourcemap: false,
+    },
+    {
+      file: pkg.module,
+      name: pkg.name,
+      format: 'esm',
       sourcemap: false,
     },
   ],

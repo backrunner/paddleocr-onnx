@@ -1,11 +1,12 @@
 import { Decimal } from 'decimal.js';
-import sharp, { Sharp } from 'sharp';
+import sharp, { type Sharp } from 'sharp';
 import ort from 'onnxruntime-node';
-import cv from '@techstark/opencv-js';
+import cv, { type Mat } from '@techstark/opencv-js';
 import Shape from '@doodle3d/clipper-js';
 
-import { DetectedBoxRect, ImageDescriptor, SharpInput } from '../types';
 import { SIDE_LENGTH_LIMIT } from '../constants/model';
+import type { DetectedBoxRect, ImageDescriptor, SharpInput } from '../types';
+
 import { normalizeImage } from './operators';
 
 const CNT_MIN_SIZE = 3;
@@ -103,7 +104,7 @@ function boxPoints(center: { x: number; y: number }, size: { width: number; heig
   return points;
 }
 
-const getMiniBoxes = (contour: cv.MatVector) => {
+const getMiniBoxes = (contour: Mat) => {
   const boundingBox = cv.minAreaRect(contour);
   const points = Array.from(boxPoints(boundingBox.center, boundingBox.size, boundingBox.angle)).sort(
     (a, b) => a[0] - b[0],
@@ -318,7 +319,7 @@ export const detect = async ({ input, modelPath }: { input: SharpInput; modelPat
   };
 
   const mat = new cv.Mat(resData.height, resData.width, cv.CV_8UC1);
-  mat.data.set(output.data);
+  mat.data.set(output.data as Uint8Array);
 
   const rects = await getBoxRects(descriptor, mat);
 
