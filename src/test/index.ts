@@ -4,7 +4,7 @@ import { detect } from '../modules/detection';
 import { MODEL_PATH } from '../constants/model';
 
 export const testDet = async () => {
-  const image = path.resolve(__dirname, '../src/test/test.png');
+  const image = path.resolve(__dirname, '../test/test.png');
   const { descriptor, rects } = await detect({ input: image, modelPath: MODEL_PATH.DET_V4_TEACHER });
 
   // 获取原始图像
@@ -29,3 +29,4 @@ export const testDet = async () => {
   // 将 SVG 叠加到原始图像上
   originalImage.composite(composite).toFile('detRes.jpg');
 };
+

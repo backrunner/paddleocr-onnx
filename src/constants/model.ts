@@ -1,6 +1,6 @@
 import path from 'path';
 
-const MODEL_DIR = path.resolve(__dirname, '../models');
+const MODEL_DIR = path.resolve(__dirname, '../../models');
 
 export const MODEL_PATH = {
   DET: path.resolve(MODEL_DIR, './det_onnx/model.onnx'),
