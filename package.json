@@ -11,12 +11,15 @@
   "scripts": {
     "watch": "cross-env NODE_ENV=dev rollup -c rollup.config.ts -w",
     "build": "rimraf ./dist && tsc --module commonjs && cross-env NODE_ENV=production rollup -c rollup.config.ts && rimraf ./dist/lib",
+    "build:test": "rimraf ./dist && tsc --module commonjs && cross-env NODE_ENV=production PADDLE_OCR_TEST=1 rollup -c rollup.config.ts && rimraf ./dist/lib",
+    "test": "npm run build:test && node ./dist/paddleocr-onnx.test.mjs",
     "lint": "eslint ./src/**/*"
   },
   "author": "BackRunner",
   "license": "Apache-2.0",
   "devDependencies": {
     "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-esm-shim": "^0.1.6",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-replace": "^5.0.5",

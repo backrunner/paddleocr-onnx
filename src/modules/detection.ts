@@ -190,7 +190,7 @@ const unclip = async (box: [number, number][]) => {
     obj.Y = item[1];
     boxPoints.push(obj);
   });
-  const shape = new Shape([boxPoints]);
+  const shape = new ((Shape as any).default ? (Shape as any).default : Shape)([boxPoints]) as Shape;
   return shape.offset(distance, {
     jointType: 'jtRound',
   });
@@ -289,7 +289,7 @@ const createInferenceSession = async (modelPath: string) => {
 };
 
 export const detect = async ({ input, modelPath }: { input: SharpInput; modelPath: string }) => {
-  const loadedImage = await sharp(input);
+  const loadedImage = sharp(input);
   const descriptor = await beforeDetection(loadedImage);
 
   const normalized = normalizeImage(descriptor).flat(Infinity) as number[];
@@ -308,9 +308,11 @@ export const detect = async ({ input, modelPath }: { input: SharpInput; modelPat
 
   const output = res[session.outputNames[0]];
 
-  await new Promise((resolve) => {
-    cv.onRuntimeInitialized = resolve as () => any;
-  });
+  if (!cv) {
+    await new Promise((resolve) => {
+      cv.onRuntimeInitialized = resolve as () => any;
+    });
+  }
 
   const resData = {
     width: descriptor.destWidth,

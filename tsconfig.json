@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
     "moduleResolution": "node",
-    "target": "es6",
-    "module": "es6",
-    "lib": ["es2015", "es2016", "es2017", "dom"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "lib": ["ESNext", "DOM"],
     "strict": true,
     "sourceMap": true,
     "declaration": true,

@@ -7,9 +7,9 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "启动程序",
+      "name": "启动测试",
       "skipFiles": ["<node_internals>/**"],
-      "program": "${workspaceFolder}\\dist\\paddleocr-onnx.js",
+      "program": "${workspaceFolder}/dist/paddleocr-onnx.test.mjs",
       "outFiles": ["${workspaceFolder}/dist/lib/**/*.js"],
       "args": ["--inspect"]
     }

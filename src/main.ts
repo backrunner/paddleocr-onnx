@@ -1,3 +1,1 @@
-import { testDet } from './test';
-
-testDet();
+export * from './modules/detection';

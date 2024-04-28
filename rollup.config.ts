@@ -1,13 +1,17 @@
-import path from 'path';
+import { defineConfig } from 'rollup';
 
+import sourceMaps from 'rollup-plugin-sourcemaps';
+import typescript from 'rollup-plugin-typescript2';
+
+import esmShim from '@rollup/plugin-esm-shim';
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import replace from '@rollup/plugin-replace';
-import sourceMaps from 'rollup-plugin-sourcemaps';
-import typescript from 'rollup-plugin-typescript2';
 
 import pkg from './package.json';
+
+const IS_TEST = process.env.PADDLE_OCR_TEST === '1';
 
 const plugins = [
   json(),
@@ -16,26 +20,28 @@ const plugins = [
     preferBuiltins: true,
   }),
   replace({
-    __dirname: path.resolve(__dirname, './src'),
+    'global.__IS_BUNDLED__': JSON.stringify(true),
+    preventAssignment: true,
   }),
   commonjs({
     ignoreDynamicRequires: true,
   }),
   typescript({ useTsconfigDeclarationDir: true }),
+  esmShim(),
   sourceMaps(),
 ];
 
-export default {
-  input: `src/main.ts`,
+export default defineConfig({
+  input: IS_TEST ? `src/test/index.ts` : `src/main.ts`,
   output: [
     {
-      file: pkg.main,
+      file: IS_TEST ? pkg.main.replace('.cjs', '.test.cjs') : pkg.main,
       name: pkg.name,
       format: 'cjs',
       sourcemap: false,
     },
     {
-      file: pkg.module,
+      file: IS_TEST ? pkg.module.replace('.mjs', '.test.mjs') : pkg.module,
       name: pkg.name,
       format: 'esm',
       sourcemap: false,
@@ -46,4 +52,4 @@ export default {
     include: 'src/**',
   },
   plugins,
-};
+});

@@ -3,11 +3,10 @@
   "tasks": [
     {
       "type": "npm",
-      "script": "build",
+      "script": "build test",
       "group": "build",
       "problemMatcher": [],
-      "label": "npm: build",
-      "detail": "rimraf ./dist && tsc --module commonjs && cross-env NODE_ENV=production rollup -c rollup.config.ts && rimraf ./dist/lib"
+      "label": "npm: build test"
     }
   ]
 }

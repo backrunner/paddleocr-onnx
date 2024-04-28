@@ -1,5 +1,6 @@
 import { Decimal } from 'decimal.js';
-import { ImageDescriptor } from '../types';
+
+import type { ImageDescriptor } from '../types';
 
 export const normalizeImage = (
   descriptor: ImageDescriptor,
