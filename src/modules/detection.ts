@@ -1,6 +1,7 @@
 import { Decimal } from 'decimal.js';
 import sharp, { type Sharp } from 'sharp';
 import ort from 'onnxruntime-node';
+import { Polygon, Point } from '@mathigon/euclid';
 import cv, { type Mat } from '@techstark/opencv-js';
 import Shape from '@doodle3d/clipper-js';
 
@@ -64,37 +65,38 @@ const beforeDetection = async (image: Sharp): Promise<ImageDescriptor> => {
 };
 
 function boxPoints(center: { x: number; y: number }, size: { width: number; height: number }, angle: number) {
-  const { width, height } = size;
-  const { x: cx, y: cy } = center;
-  const radian = new Decimal(angle).mul(Decimal.set({ precision: 100 }).acos(-1).dividedBy(180));
-
-  const points = [];
-  for (let i = 0; i < 4; i++) {
-    const x = new Decimal(i & 1 ? -1 : 1).mul(width).dividedBy(2);
-    const y = new Decimal(i & 2 ? -1 : 1).mul(height).dividedBy(2);
-
-    const sinVal = Decimal.sin(radian);
-    const cosVal = Decimal.cos(radian);
-
-    const rotatedX = x.mul(cosVal).minus(y.mul(sinVal));
-    const rotatedY = x.mul(sinVal).add(y.mul(cosVal));
-
-    points.push([rotatedX.add(cx).toNumber(), rotatedY.add(cy).toNumber()]);
-  }
-
-  return points;
+  const angleRad = (angle * Math.PI) / 180;
+  const cosA = Math.cos(angleRad);
+  const sinA = Math.sin(angleRad);
+  const w2 = size.width / 2;
+  const h2 = size.height / 2;
+  // Calculate the change in coordinates at each corner due to rotation
+  const changes = [
+    { dx: -w2 * cosA - h2 * sinA, dy: w2 * sinA - h2 * cosA },
+    { dx: w2 * cosA - h2 * sinA, dy: -w2 * sinA - h2 * cosA },
+    { dx: w2 * cosA + h2 * sinA, dy: -w2 * sinA + h2 * cosA },
+    { dx: -w2 * cosA + h2 * sinA, dy: w2 * sinA + h2 * cosA },
+  ];
+  // Apply the rotation to each corner point
+  const vertices = changes.map((change) => {
+    return {
+      x: center.x + change.dx,
+      y: center.y + change.dy,
+    };
+  });
+  return vertices.flatMap(({ x, y }) => [[x, y]]) as [number, number][];
 }
 
 const getMiniBoxes = (contour: Mat) => {
   const boundingBox = cv.minAreaRect(contour);
-  const points = Array.from(boxPoints(boundingBox.center, boundingBox.size, boundingBox.angle)).sort(
-    (a, b) => a[0] - b[0],
-  ) as [number, number][];
+
+  const points = boxPoints(boundingBox.center, boundingBox.size, boundingBox.angle).sort((a, b) => a[0] - b[0]);
 
   let index_1 = 0;
   let index_2 = 1;
   let index_3 = 2;
   let index_4 = 3;
+
   if (points[1][1] > points[0][1]) {
     index_1 = 0;
     index_4 = 1;
@@ -102,6 +104,7 @@ const getMiniBoxes = (contour: Mat) => {
     index_1 = 1;
     index_4 = 0;
   }
+
   if (points[3][1] > points[2][1]) {
     index_2 = 2;
     index_3 = 3;
@@ -116,56 +119,21 @@ const getMiniBoxes = (contour: Mat) => {
   return { points: box, sside: side };
 };
 
-function polygonPolygonArea(polygon: [number, number][]) {
-  let i = -1;
-  let n = polygon.length;
-  let a: [number, number];
-  let b = polygon[n - 1];
-  let area = new Decimal(0);
-
-  while (++i < n) {
-    a = b;
-    b = polygon[i];
-    area = area.add(new Decimal(a[1]).mul(b[0]).minus(new Decimal(a[0]).mul(b[1])));
-  }
-
-  return area.dividedBy(2).toNumber();
-}
-
-function polygonPolygonLength(polygon: [number, number][]) {
-  let i = -1;
-  let n = polygon.length;
-  let b = polygon[n - 1];
-  let xa: number;
-  let ya: number;
-  let xb = b[0];
-  let yb = b[1];
-  let perimeter = 0;
-
-  while (++i < n) {
-    xa = xb;
-    ya = yb;
-    b = polygon[i];
-    xb = b[0];
-    yb = b[1];
-    xa -= xb;
-    ya -= yb;
-    perimeter += Math.hypot(xa, ya);
-  }
-
-  return perimeter;
-}
-
 const unclip = async (box: [number, number][]) => {
   const unclipRatio = 1.5;
-  const area = Math.abs(polygonPolygonArea(box));
-  const length = polygonPolygonLength(box);
+
+  const polygon = new Polygon(...box.map((item) => new Point(item[0], item[1])));
+  const area = Math.abs(polygon.area);
+  const length = polygon.circumference;
   const distance = (area * unclipRatio) / length;
-  const boxPoints: { X: number; Y: number }[] = box.map((item) => ({
-    X: item[0],
-    Y: item[1],
-  }));
-  const shape = new ((Shape as any).default ? (Shape as any).default : Shape)([boxPoints]) as Shape;
+
+  const shape = new ((Shape as any).default ? (Shape as any).default : Shape)([
+    box.map((item) => ({
+      X: item[0],
+      Y: item[1],
+    })),
+  ]) as Shape;
+
   return shape.offset(distance, {
     jointType: 'jtRound',
   });
@@ -215,6 +183,10 @@ const getBoxRects = async (descriptor: ImageDescriptor, bitmap: cv.Mat) => {
   // get contours
   for (let i = 0; i < (contours as any).size(); i++) {
     const cnt = contours.get(i);
+    const epsilon = 0.001 * cv.arcLength(cnt, true);
+
+    cv.approxPolyDP(cnt, cnt, epsilon, true);
+
     const { points, sside } = getMiniBoxes(cnt);
     if (sside < CNT_MIN_SIZE) {
       continue;
@@ -309,7 +281,7 @@ export const detect = async ({ input, modelPath }: { input: SharpInput; modelPat
 
   // dilate the mat with 2x2 kernel
   const kernel = new cv.Mat(2, 2, cv.CV_8UC1);
-  kernel.data.set([255, 255, 255, 255]);
+  kernel.data.set([1, 1, 1, 1]);
 
   cv.dilate(mat, mat, kernel);
 

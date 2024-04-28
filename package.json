@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@doodle3d/clipper-js": "^1.0.11",
+    "@mathigon/euclid": "^1.1.21",
     "@techstark/opencv-js": "^4.8.0-release.10",
     "decimal.js": "^10.4.3",
     "onnxruntime-node": "^1.17.3",
