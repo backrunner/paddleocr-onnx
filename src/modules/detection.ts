@@ -15,50 +15,31 @@ const CNT_MIN_SIZE = 3;
 const beforeDetection = async (image: Sharp): Promise<ImageDescriptor> => {
   const metadata = await image.metadata();
   let converted: Sharp | undefined;
-  let newWidth = 0;
-  let newHeight = 0;
   let ratio = new Decimal(1);
-  if (metadata.width && metadata.width > SIDE_LENGTH_LIMIT) {
-    ratio = new Decimal(metadata.width).dividedBy(SIDE_LENGTH_LIMIT);
-    const calcedNewHeight = new Decimal(metadata.height || 0).dividedBy(ratio).round();
-    newHeight = Math.max(calcedNewHeight.dividedBy(32).round().mul(32).toNumber(), 32);
-    newWidth = Math.max(new Decimal(SIDE_LENGTH_LIMIT).dividedBy(32).round().mul(32).toNumber(), 32);
-    converted = image
-      .resize({
-        width: newWidth,
-        height: newHeight,
-        fit: 'fill',
-        kernel: 'nearest',
-      })
-      .removeAlpha();
-  } else {
-    if (metadata.height && metadata.height > SIDE_LENGTH_LIMIT) {
-      ratio = new Decimal(metadata.height).dividedBy(SIDE_LENGTH_LIMIT);
-      newHeight = Math.max(new Decimal(SIDE_LENGTH_LIMIT).dividedBy(32).round().mul(32).toNumber(), 32);
-      const calcedNewWidth = new Decimal(metadata.width || 0).dividedBy(ratio).round();
-      newWidth = Math.max(calcedNewWidth.dividedBy(32).round().mul(32).toNumber(), 32);
-      converted = image
-        .resize({
-          width: newWidth,
-          height: newHeight,
-          fit: 'fill',
-          kernel: 'nearest',
-        })
-        .removeAlpha();
-      ratio = new Decimal(metadata.height).dividedBy(SIDE_LENGTH_LIMIT);
+
+  if (!metadata.width || !metadata.height) {
+    throw new Error('Invalid image');
+  }
+
+  if (Math.max(metadata.width, metadata.height) > SIDE_LENGTH_LIMIT) {
+    if (metadata.height > metadata.width) {
+      ratio = new Decimal(SIDE_LENGTH_LIMIT).dividedBy(metadata.height);
     } else {
-      newWidth = Math.max(new Decimal(metadata.width || 0).dividedBy(32).round().mul(32).toNumber(), 32);
-      newHeight = Math.max(new Decimal(metadata.height || 0).dividedBy(32).round().mul(32).toNumber(), 32);
-      converted = image
-        .resize({
-          width: newWidth,
-          height: newHeight,
-          fit: 'fill',
-          kernel: 'nearest',
-        })
-        .removeAlpha();
+      ratio = new Decimal(SIDE_LENGTH_LIMIT).dividedBy(metadata.width);
     }
   }
+
+  let resizedWidth = new Decimal(metadata.width).mul(ratio).dividedBy(32).round().mul(32).toNumber();
+  let resizedHeight = new Decimal(metadata.height).mul(ratio).dividedBy(32).round().mul(32).toNumber();
+
+  converted = image
+    .resize({
+      width: resizedWidth,
+      height: resizedHeight,
+      fit: 'fill',
+      kernel: 'nearest',
+    })
+    .removeAlpha();
 
   if (!converted) {
     throw new Error('Cannot get the converted image.');
@@ -69,7 +50,7 @@ const beforeDetection = async (image: Sharp): Promise<ImageDescriptor> => {
     ),
   );
 
-  if (!newWidth || !newHeight) {
+  if (!resizedWidth || !resizedHeight) {
     throw new Error('Wrong image shape.');
   }
 
@@ -77,8 +58,8 @@ const beforeDetection = async (image: Sharp): Promise<ImageDescriptor> => {
     image: { red, green, blue },
     width: metadata.width || 0,
     height: metadata.height || 0,
-    destWidth: newWidth,
-    destHeight: newHeight,
+    destWidth: resizedWidth,
+    destHeight: resizedHeight,
   };
 };
 
@@ -176,20 +157,14 @@ function polygonPolygonLength(polygon: [number, number][]) {
 }
 
 const unclip = async (box: [number, number][]) => {
-  const unclip_ratio = 1.5;
+  const unclipRatio = 1.5;
   const area = Math.abs(polygonPolygonArea(box));
   const length = polygonPolygonLength(box);
-  const distance = (area * unclip_ratio) / length;
-  const boxPoints: { X: number; Y: number }[] = [];
-  box.forEach((item) => {
-    const obj = {
-      X: 0,
-      Y: 0,
-    };
-    obj.X = item[0];
-    obj.Y = item[1];
-    boxPoints.push(obj);
-  });
+  const distance = (area * unclipRatio) / length;
+  const boxPoints: { X: number; Y: number }[] = box.map((item) => ({
+    X: item[0],
+    Y: item[1],
+  }));
   const shape = new ((Shape as any).default ? (Shape as any).default : Shape)([boxPoints]) as Shape;
   return shape.offset(distance, {
     jointType: 'jtRound',
@@ -232,6 +207,7 @@ const getBoxRects = async (descriptor: ImageDescriptor, bitmap: cv.Mat) => {
   // the res is actually a bitmap
   const contours = new cv.MatVector();
   const hierarchy = new cv.Mat();
+
   cv.findContours(bitmap, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
 
   const boxes: DetectedBoxRect[] = [];
@@ -260,19 +236,21 @@ const getBoxRects = async (descriptor: ImageDescriptor, bitmap: cv.Mat) => {
 
     // sort points by clockwise order
     const detRect = orderPointsClockwise(miniBox.points);
-
-    let rx = new Decimal(descriptor.width).dividedBy(descriptor.destWidth);
-    let ry = new Decimal(descriptor.height).dividedBy(descriptor.destHeight);
+    const rectWidth = Math.round(Math.max(linalgNorm(detRect[0], detRect[1]), linalgNorm(detRect[2], detRect[3])));
+    const rectHeight = Math.round(Math.max(linalgNorm(detRect[0], detRect[3]), linalgNorm(detRect[1], detRect[2])));
 
     detRect.forEach((point) => {
-      point[0] = clip(new Decimal(point[0]).mul(rx).toNumber(), 0, descriptor.destWidth);
-      point[1] = clip(new Decimal(point[1]).mul(ry).toNumber(), 0, descriptor.destHeight);
+      point[0] = clip(
+        new Decimal(point[0]).dividedBy(descriptor.destWidth).mul(descriptor.width).round().toNumber(),
+        0,
+        descriptor.destWidth,
+      );
+      point[1] = clip(
+        new Decimal(point[1]).dividedBy(descriptor.destHeight).mul(descriptor.height).round().toNumber(),
+        0,
+        descriptor.destHeight,
+      );
     });
-
-    const rectWidth = Math.round(linalgNorm(detRect[0], detRect[1]));
-    const rectHeight = Math.round(linalgNorm(detRect[0], detRect[3]));
-
-    if (rectWidth <= CNT_MIN_SIZE || rectHeight <= CNT_MIN_SIZE) continue;
 
     boxes.push({
       rect: detRect,
@@ -317,11 +295,23 @@ export const detect = async ({ input, modelPath }: { input: SharpInput; modelPat
   const resData = {
     width: descriptor.destWidth,
     height: descriptor.destHeight,
-    data: output.data,
+    data: output.data as Uint8Array,
   };
 
+  const data: number[] = [];
+  resData.data.forEach((value) => {
+    if (value > 0.3) data.push(255);
+    else data.push(0);
+  });
+
   const mat = new cv.Mat(resData.height, resData.width, cv.CV_8UC1);
-  mat.data.set(output.data as Uint8Array);
+  mat.data.set(new Uint8Array(data));
+
+  // dilate the mat with 2x2 kernel
+  const kernel = new cv.Mat(2, 2, cv.CV_8UC1);
+  kernel.data.set([255, 255, 255, 255]);
+
+  cv.dilate(mat, mat, kernel);
 
   const rects = await getBoxRects(descriptor, mat);
 
